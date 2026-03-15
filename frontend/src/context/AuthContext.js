@@ -9,7 +9,20 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      //setUser(JSON.parse(storedUser));
+       try {
+        const parsedUser = JSON.parse(storedUser);
+        if (parsedUser && typeof parsedUser === "object") {
+          setUser(parsedUser);
+        } else {
+          localStorage.removeItem("user");
+        }
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error("Invalid stored user payload. Clearing auth cache.", error);
+        localStorage.removeItem("user");
+        localStorage.removeItem("token");
+      }
     }
     setLoading(false);
   }, []);

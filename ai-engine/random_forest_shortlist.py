@@ -89,3 +89,4 @@ def retrain_from_feedback(features_list, labels_list):
     clf.fit(X, y)
     joblib.dump(clf, MODEL_PATH)
     return True
+

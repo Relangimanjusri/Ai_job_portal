@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-
+ 
 :root {
   --primary: #6366f1;
   --primary-dark: #4f46e5;
@@ -19,7 +19,7 @@
 body {
   margin: 0;
   font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-  background: linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 50%, #f8fafc 100%);
+  background: linear-gradient(135deg, #eef2ff,#f8fafc);
   min-height: 100vh;
   color: #1e293b;
 }
@@ -61,10 +61,13 @@ body {
   transform: translateY(-1px);
 }
 
-.dashboard-container {
+.layout {
   max-width: 1280px;
   margin: 2rem auto;
   padding: 0 2rem;
+}
+.dashboard-content{
+  width:100%;
 }
 
 .brand-logo {
@@ -274,4 +277,31 @@ body {
 .btn-save:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 20px -10px rgba(99, 102, 241, 0.4);
+}
+
+/* Applicant dashboard layout */
+.applicant-dashboard-layout {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.applicant-sidebar {
+  position: sticky;
+  top: 90px;
+}
+
+.dashboard-main-content {
+  min-width: 0;
+}
+
+@media (max-width: 1024px) {
+  .applicant-dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .applicant-sidebar {
+    position: static;
+  }
 }

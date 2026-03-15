@@ -8,7 +8,7 @@ from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from preprocessing import preprocess_for_similarity
-from rule_extraction import extract_all, extract_required_skills_from_jd
+from rule_extraction import extract_all, extract_required_skills_from_jd, normalize_skills
 from config import MODEL_NAME, DEVICE
 
 # Lazy-load model to avoid loading on import if only parsing
@@ -60,10 +60,10 @@ def compute_skill_gap_report(resume_text, job_desc, job_title=""):
     resume_ext = extract_all(resume_text)
     jd_ext = extract_all(job_desc)
     jd_required = extract_required_skills_from_jd(job_desc)
-    jd_skills = set(s.lower() for s in (jd_ext.get("skills") or []) + jd_required)
-    resume_skills = set(s.lower() for s in resume_ext.get("skills", []))
-    matched = list(resume_skills & jd_skills)
-    missing = list(jd_skills - resume_skills)
+    jd_skills = set(normalize_skills((jd_ext.get("skills") or []) + jd_required))
+    resume_skills = set(normalize_skills(resume_ext.get("skills", [])))
+    matched = sorted(resume_skills & jd_skills)
+    missing = sorted(jd_skills - resume_skills)
 
     # Tools/frameworks: typically single words or known tech terms
     tech_like = re.compile(r"^[a-z0-9#+.]+$|python|java|react|node|aws|docker|sql|mongodb|kubernetes|azure|gcp|figma|jira|agile|scrum", re.I)

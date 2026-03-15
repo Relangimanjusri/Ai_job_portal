@@ -20,6 +20,9 @@ export default function Navbar() {
       <div className="nav-section nav-center">
         {user.role === "jobseeker" ? (
           <>
+            <Link to="/jobseeker/dashboard" className="nav-link">
+              <LayoutDashboard size={18} /> <span>Dashboard</span>
+            </Link>
             <Link to="/jobseeker/jobs" className="nav-link">
               <Briefcase size={18} /> <span>Browse Jobs</span>
             </Link>
@@ -43,7 +46,7 @@ export default function Navbar() {
       <div className="nav-section nav-right">
         <div className="user-profile-trigger" onClick={() => navigate(`/${user.role}/profile`)}>
           <User size={18} />
-          <span className="user-name-text">{user.name}</span>
+          <span className="user-name-text">{user?.name || "User"}</span>
         </div>
         <button className="icon-btn-logout" onClick={logout} title="Logout Session">
           <LogOut size={18} />

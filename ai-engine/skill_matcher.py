@@ -10,3 +10,4 @@ def compare_skills(resume_skills, jd_skills):
     missing_skills = list(jd_set - resume_set)
 
     return matched_skills, missing_skills
+

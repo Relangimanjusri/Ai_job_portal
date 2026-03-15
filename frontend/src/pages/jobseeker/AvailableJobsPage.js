@@ -1,9 +1,18 @@
 import { useEffect, useState } from "react";
 import api from "../../services/api";
 import { UploadCloud, FileText, X, Download } from "lucide-react";
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } from "recharts";
+import {
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
+import { sanitizeTechnicalSkills } from "../../utils/skillExtraction";
 
-export default function AvailableJobsPage() {
+export default function AvailableJobsPage({ embedded = false }) {
   const [jobs, setJobs] = useState([]);
   const [loadingId, setLoadingId] = useState(null);
   const [dragActive, setDragActive] = useState(false);
@@ -16,21 +25,27 @@ export default function AvailableJobsPage() {
   const [skillGapData, setSkillGapData] = useState(null);
   const [skillGapJob, setSkillGapJob] = useState(null);
 
-  useEffect(() => {
-    api.get("/api/jobs")
+ useEffect(() => {
+    api
+      .get("/api/jobs")
       .then((res) => setJobs(res.data))
       .catch((err) => console.error("Fetch failed", err));
   }, []);
 
   const handleFile = (file) => {
     if (!file || !/\.(pdf|docx)$/i.test(file.name)) return;
+
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
     setSelectedFile(file);
     if (file.type === "application/pdf") {
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
-      return () => URL.revokeObjectURL(url);
+    } else {
+      setPreviewUrl(null);
     }
-    setPreviewUrl(null);
   };
 
   const handleDrag = (e) => {
@@ -43,13 +58,14 @@ export default function AvailableJobsPage() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    const f = e.dataTransfer.files[0];
-    handleFile(f);
+    const droppedFile = e.dataTransfer.files[0];
+    handleFile(droppedFile);
   };
 
   const handleApply = async (jobId, file) => {
     const f = file || selectedFile;
     if (!f) return;
+
     const formData = new FormData();
     formData.append("jobId", jobId);
     formData.append("resume", f);
@@ -57,10 +73,19 @@ export default function AvailableJobsPage() {
     setLoadingId(jobId);
     setLastJobId(jobId);
     setLastResult(null);
+
     try {
       const res = await api.post("/api/applications/apply-ai", formData);
-      setLastResult(res.data.aiAnalysis || res.data);
-      setLastJobId(jobId);
+      const payload = res.data.aiAnalysis || res.data;
+      const cleanedSkills = sanitizeTechnicalSkills(payload?.extracted?.skills || []);
+
+      setLastResult({
+        ...payload,
+        extracted: {
+          ...(payload.extracted || {}),
+          skills: cleanedSkills,
+        },
+      });
     } catch (err) {
       alert(err.response?.data?.msg || "Application failed");
     } finally {
@@ -85,13 +110,20 @@ export default function AvailableJobsPage() {
       alert("Upload a resume first, then select a job and run Skill Gap.");
       return;
     }
+
     setSkillGapLoading(true);
     const formData = new FormData();
     formData.append("resume", selectedFile);
     formData.append("jobId", skillGapJob._id);
+
     try {
       const res = await api.post("/api/applications/skill-gap", formData);
-      setSkillGapData(res.data);
+      setSkillGapData({
+        ...res.data,
+        matched_skills: sanitizeTechnicalSkills(res.data.matched_skills || []),
+        missing_skills: sanitizeTechnicalSkills(res.data.missing_skills || []),
+        suggested_keywords: sanitizeTechnicalSkills(res.data.suggested_keywords || []),
+      });
     } catch (err) {
       alert(err.response?.data?.msg || "Skill gap analysis failed");
     } finally {
@@ -101,6 +133,7 @@ export default function AvailableJobsPage() {
 
   const downloadReport = () => {
     if (!skillGapData?.report_text) return;
+
     const blob = new Blob([skillGapData.report_text], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -119,6 +152,7 @@ export default function AvailableJobsPage() {
         const yrsRes = skillGapData.years_resume ?? 0;
         const yrsJd = skillGapData.years_jd ?? 1;
         const expFit = yrsJd > 0 ? Math.min(100, Math.round((yrsRes / yrsJd) * 100)) : 80;
+
         return [
           { subject: "Skills match", score: skillOverlap, fullMark: 100 },
           { subject: "Experience fit", score: expFit, fullMark: 100 },
@@ -131,148 +165,167 @@ export default function AvailableJobsPage() {
 
   return (
     <div className="page-wrapper max-w-6xl mx-auto">
-      <header className="page-header mb-8">
-        <h1 className="text-3xl font-extrabold bg-gradient-to-r from-indigo-600 to-indigo-800 bg-clip-text text-transparent">Available Jobs</h1>
-        <p className="text-slate-600 mt-2 text-base">Find roles optimized for your skill set via AI matching.</p>
-      </header>
-
-      {/* Resume upload: drag & drop + preview */}
-      <div className="mb-8 p-6 rounded-2xl card-premium">
-        <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-          <FileText size={18} /> Resume
-        </h3>
-        <div
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
-            dragActive ? "border-indigo-500 bg-indigo-50" : "border-slate-300 bg-slate-50 hover:border-slate-400"
-          }`}
-        >
-          <input
-            type="file"
-            accept=".pdf,.docx"
-            className="hidden"
-            id="resume-upload"
-            onChange={(e) => handleFile(e.target.files[0])}
-          />
-          <label htmlFor="resume-upload" className="cursor-pointer block">
-            <UploadCloud className="mx-auto text-slate-400 mb-2" size={32} />
-            <p className="text-slate-600 text-sm">
-              {selectedFile ? selectedFile.name : "Drag & drop your resume (PDF/DOCX) or click to browse"}
-            </p>
-          </label>
-        </div>
-        {previewUrl && (
-          <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
-            <span>Preview:</span>
-            <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 font-medium hover:underline">
-              Open PDF
-            </a>
-          </div>
-        )}
-      </div>
-
-      {/* Last AI result: breakdown + extracted skills */}
-      {lastResult && (
-        <div className="mb-8 p-6 rounded-2xl card-premium">
-          <h3 className="text-base font-semibold text-slate-800 mb-4">Last match result</h3>
-          <div className="flex flex-wrap items-center gap-4 mb-4">
-            <div
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${getMatchColor(
-                lastResult.match_percentage || 0
-              )}`}
-            >
-              <span className="font-bold">{lastResult.match_percentage ?? 0}%</span> match
-            </div>
-            {lastResult.match_breakdown && (
-              <div className="flex gap-3 text-xs text-slate-600">
-                <span>SBERT: {lastResult.match_breakdown.sbert_score}%</span>
-                <span>TF-IDF: {lastResult.match_breakdown.tfidf_score}%</span>
-                <span>Rule: {lastResult.match_breakdown.rule_score}%</span>
-              </div>
-            )}
-          </div>
-          {lastResult.extracted?.skills?.length > 0 && (
-            <div className="mb-2">
-              <p className="text-xs font-medium text-slate-500 mb-1">Extracted skills</p>
-              <div className="flex flex-wrap gap-2">
-                {lastResult.extracted.skills.slice(0, 15).map((s, i) => (
-                  <span
-                    key={i}
-                    className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs"
-                  >
-                    {s}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          {lastResult.missing_keywords?.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-slate-500 mb-1">Missing keywords</p>
-              <div className="flex flex-wrap gap-2">
-                {lastResult.missing_keywords.slice(0, 10).map((k, i) => (
-                  <span key={i} className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-xs">
-                    {k}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+      {!embedded && (
+        <header className="page-header mb-8">
+          <h1 className="text-3xl font-extrabold bg-gradient-to-r from-indigo-600 to-indigo-800 bg-clip-text text-transparent">
+            Available Jobs
+          </h1>
+          <p className="text-slate-600 mt-2 text-base">Find roles optimized for your skill set via AI matching.</p>
+        </header>
       )}
 
-      {/* Job list */}
-      <div className="grid gap-4">
-        {jobs.map((job) => (
+      <section id="resume-upload">
+        <h2 className="text-xl font-bold text-slate-800 mb-4">1. Resume Upload</h2>
+
+      
+        <div className="mb-8 p-6 rounded-2xl card-premium">
+         
+          <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+            <FileText size={18} /> Resume
+          </h3>
+
           <div
-            key={job._id}
-            className="job-card-premium p-6 rounded-2xl card-premium"
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
+              dragActive ? "border-indigo-500 bg-indigo-50" : "border-slate-300 bg-slate-50 hover:border-slate-400"
+            }`}
           >
-            <div className="flex flex-wrap justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-slate-800">{job.title}</h3>
-                <p className="desc text-sm text-slate-600 mt-1 line-clamp-2">{job.description}</p>
+            <input
+              type="file"
+              accept=".pdf,.docx"
+              className="hidden"
+              id="resume-file-input"
+              onChange={(e) => handleFile(e.target.files[0])}
+            />
+            <label htmlFor="resume-file-input" className="cursor-pointer block">
+              <UploadCloud className="mx-auto text-slate-400 mb-2" size={32} />
+              <p className="text-slate-600 text-sm">
+                {selectedFile ? selectedFile.name : "Drag & drop your resume (PDF/DOCX) or click to browse"}
+              </p>
+            </label>
+          </div>
+          {previewUrl && (
+            <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+              <span>Preview:</span>
+              <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 font-medium hover:underline">
+                Open PDF
+              </a>
+            </div>
+          )}
+        </div>
+
+        <h2 id="feedback-analysis" className="text-xl font-bold text-slate-800 mb-4">
+          5. Feedback Analysis
+        </h2>
+
+        {lastResult && (
+          <div className="mb-8 p-6 rounded-2xl card-premium">
+            <h3 className="text-base font-semibold text-slate-800 mb-4">Last match result</h3>
+
+            <div className="flex flex-wrap items-center gap-4 mb-4">
+              <div
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${getMatchColor(
+                  lastResult.match_percentage || 0
+                )}`}
+              >
+                <span className="font-bold">{lastResult.match_percentage ?? 0}%</span> match
               </div>
-              <div className="action-row flex flex-wrap items-center gap-2">
-                <input
-                  type="file"
-                  id={`f-${job._id}`}
-                  accept=".pdf,.docx"
-                  className="hidden"
-                  onChange={(e) => {
-                    handleFile(e.target.files[0]);
-                    handleApply(job._id, e.target.files[0]);
-                  }}
-                />
-                <label
-                  htmlFor={`f-${job._id}`}
-                  className="btn-primary inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {loadingId === job._id ? (
-                    "AI Analyzing..."
-                  ) : (
-                    <>
-                      <UploadCloud size={16} /> Apply with AI
-                    </>
-                  )}
-                </label>
-                <button
-                  type="button"
-                  onClick={() => openSkillGap(job)}
-                  className="btn-secondary inline-flex items-center gap-2"
-                >
-                  Skill Gap
-                </button>
+
+              {lastResult.match_breakdown && (
+                <div className="flex gap-3 text-xs text-slate-600">
+                  <span>SBERT: {lastResult.match_breakdown.sbert_score}%</span>
+                  <span>TF-IDF: {lastResult.match_breakdown.tfidf_score}%</span>
+                  <span>Rule: {lastResult.match_breakdown.rule_score}%</span>
+                </div>
+              )}
+            </div>
+      
+            {lastResult.extracted?.skills?.length > 0 && (
+              <div className="mb-2">
+                <p className="text-xs font-medium text-slate-500 mb-1">Extracted skills</p>
+                <div className="flex flex-wrap gap-2">
+                  {lastResult.extracted.skills.slice(0, 15).map((s, i) => (
+                    <span key={i} className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {lastResult.missing_keywords?.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-slate-500 mb-1">Missing keywords</p>
+                <div className="flex flex-wrap gap-2">
+                  {lastResult.missing_keywords.slice(0, 10).map((k, i) => (
+                    <span key={i} className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-xs">
+                      {k}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            
+            )}
+          </div>
+      
+        )}
+
+        <h2 id="job-matching" className="text-xl font-bold text-slate-800 mb-4">
+          3. Job Matching
+        </h2>
+
+        <div id="skill-gap-radar" className="mb-4">
+          <h2 className="text-xl font-bold text-slate-800 mb-4">4. Skill Gap Radar</h2>
+        </div>
+
+        <div className="grid gap-4">
+          {jobs.map((job) => (
+            <div key={job._id} className="job-card-premium p-6 rounded-2xl card-premium">
+              <div className="flex flex-wrap justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-slate-800">{job.title}</h3>
+                  <p className="desc text-sm text-slate-600 mt-1 line-clamp-2">{job.description}</p>
+                </div>
+
+                <div className="action-row flex flex-wrap items-center gap-2">
+                  <input
+                    type="file"
+                    id={`f-${job._id}`}
+                    accept=".pdf,.docx"
+                    className="hidden"
+                    onChange={(e) => {
+                      handleFile(e.target.files[0]);
+                      handleApply(job._id, e.target.files[0]);
+                    }}
+                  />
+                  <label
+                    htmlFor={`f-${job._id}`}
+                    className="btn-primary inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {loadingId === job._id ? (
+                      "AI Analyzing..."
+                    ) : (
+                      <>
+                        <UploadCloud size={16} /> Apply with AI
+                      </>
+                    )}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => openSkillGap(job)}
+                    className="btn-secondary inline-flex items-center gap-2"
+                  >
+                    Skill Gap
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Skill Gap modal */}
+          ))}
+        </div>
+      </section>
       {skillGapOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-200">
@@ -288,6 +341,7 @@ export default function AvailableJobsPage() {
                 <X size={22} />
               </button>
             </div>
+
             <div className="p-5 overflow-y-auto flex-1">
               {!skillGapData ? (
                 <div className="text-center py-8">
@@ -315,12 +369,20 @@ export default function AvailableJobsPage() {
                           <PolarGrid stroke="#e2e8f0" />
                           <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11 }} />
                           <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 10 }} />
-                          <Radar name="Score" dataKey="score" stroke="#6366f1" fill="#6366f1" fillOpacity={0.5} strokeWidth={2} />
+                          <Radar
+                            name="Score"
+                            dataKey="score"
+                            stroke="#6366f1"
+                            fill="#6366f1"
+                            fillOpacity={0.5}
+                            strokeWidth={2}
+                          />
                           <Tooltip />
                         </RadarChart>
                       </ResponsiveContainer>
                     </div>
                   )}
+
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     <div>
                       <p className="text-xs font-medium text-slate-500 mb-1">Matched skills</p>
@@ -343,6 +405,7 @@ export default function AvailableJobsPage() {
                       </div>
                     </div>
                   </div>
+
                   {(skillGapData.suggested_keywords || []).length > 0 && (
                     <div className="mb-4">
                       <p className="text-xs font-medium text-slate-500 mb-1">Suggested keywords to add</p>
@@ -355,6 +418,7 @@ export default function AvailableJobsPage() {
                       </div>
                     </div>
                   )}
+
                   {(skillGapData.phrasing_suggestions || []).length > 0 && (
                     <ul className="list-disc list-inside text-sm text-slate-700 mb-4 space-y-1">
                       {skillGapData.phrasing_suggestions.map((p, i) => (
@@ -362,6 +426,7 @@ export default function AvailableJobsPage() {
                       ))}
                     </ul>
                   )}
+
                   <button
                     type="button"
                     onClick={downloadReport}
