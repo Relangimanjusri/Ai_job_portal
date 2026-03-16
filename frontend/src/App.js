@@ -10,7 +10,7 @@ import ProfilePage from "./pages/jobseeker/ProfilePage";
 import AvailableJobsPage from "./pages/jobseeker/AvailableJobsPage";
 import AppliedJobsPage from "./pages/jobseeker/AppliedJobsPage";
 import DashboardPage from "./pages/jobseeker/DashboardPage";
-//import JobseekerLayout from './pages/jobseeker/JobseekerLayout';
+import JobseekerLayout from './pages/jobseeker/JobseekerLayout';
 import PostJobPage from "./pages/recruiter/PostJobPage";
 import MyJobsPage from "./pages/recruiter/MyJobsPage";
 import ApplicantsPage from "./pages/recruiter/ApplicantsPage";
